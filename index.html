@@ -2,39 +2,68 @@
 <html lang="mn">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Snake Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Snake - Dark Edition</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; }
-        #game-container { position: relative; margin-top: 20px; }
-        canvas { border: 2px solid #444; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .menu { background: #2a2a2a; padding: 20px; border-radius: 10px; margin-top: 50px; text-align: center; }
-        input { padding: 10px; border-radius: 5px; border: none; margin: 5px; }
-        button { padding: 10px 20px; border-radius: 5px; border: none; background: #4CAF50; color: white; cursor: pointer; }
-        button:hover { background: #45a049; }
-        .room-info { margin-top: 10px; color: #aaa; }
+        body { background-color: #121212; color: #e0e0e0; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: #1e1e1e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 450px; }
+        h1 { color: #4CAF50; margin-bottom: 20px; font-weight: 300; }
+        input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: white; outline: none; }
+        button { width: 85%; padding: 12px; margin: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #45a049; transform: translateY(-2px); }
+        canvas { background: #000; border: 2px solid #333; margin-top: 20px; display: none; border-radius: 5px; }
+        #status { margin-top: 15px; color: #888; font-size: 0.9em; }
     </style>
 </head>
 <body>
-
-    <div id="lobby" class="menu">
-        <h2>Snake Multiplayer</h2>
-        <input type="text" id="username" placeholder="Нэрээ бичнэ үү..."> <br>
-        <button onclick="createRoom()">Өрөө үүсгэх</button>
-        <div style="margin: 10px;">эсвэл</div>
-        <input type="text" id="roomCode" placeholder="Өрөөний код...">
-        <button onclick="joinRoom()">Холбогдох</button>
+    <div class="container" id="lobby">
+        <h1>Snake Online</h1>
+        <input type="text" id="username" placeholder="Таны нэр...">
+        <button onclick="createRoom()">Шинэ өрөө үүсгэх</button>
+        <div style="margin: 15px; color: #555;">— эсвэл —</div>
+        <input type="text" id="roomCode" placeholder="Өрөөний код оруулах">
+        <button onclick="joinRoom()" style="background: #2196F3;">Өрөөнд орох</button>
+        <div id="status">Найзтайгаа тоглоход бэлэн үү?</div>
     </div>
 
-    <div id="game-area" style="display:none;">
-        <h3 id="player-display"></h3>
-        <canvas id="gameCanvas" width="600" height="400"></canvas>
-        <div class="room-info" id="room-id-display"></div>
+    <div id="game-area" style="display:none; text-align: center;">
+        <h2 id="room-display" style="color: #888;"></h2>
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        // Энд тоглоомын JS логик орно
+        let canvas = document.getElementById('gameCanvas');
+        let ctx = canvas.getContext('2d');
+
+        function createRoom() {
+            const name = document.getElementById('username').value;
+            if(!name) return alert("Нэрээ оруулна уу!");
+            socket.emit('createRoom', { name });
+        }
+
+        function joinRoom() {
+            const name = document.getElementById('username').value;
+            const code = document.getElementById('roomCode').value;
+            if(!name || !code) return alert("Нэр болон код оруулна уу!");
+            socket.emit('joinRoom', { name, code });
+        }
+
+        socket.on('roomCreated', (code) => {
+            startDisplay(code);
+        });
+
+        socket.on('joinedSuccess', (code) => {
+            startDisplay(code);
+        });
+
+        function startDisplay(code) {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('room-display').innerText = "Өрөөний код: " + code;
+            // Тоглоомын зурах хэсэг энд үргэлжилнэ...
+        }
     </script>
 </body>
 </html>

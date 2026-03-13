@@ -3,21 +3,28 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-app.use(express.static('public'));
+app.use(express.static(__dirname));
 
 io.on('connection', (socket) => {
+    console.log('Хэрэглэгч холбогдлоо');
+
     socket.on('createRoom', (data) => {
-        const roomId = Math.random().toString(36).substring(2, 7); // Санамсаргүй 5 оронтой код
+        const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
         socket.join(roomId);
         socket.emit('roomCreated', roomId);
     });
 
-    socket.on('joinRoom', (roomId) => {
-        socket.join(roomId);
-        io.to(roomId).emit('playerJoined', 'Шинэ тоглогч орж ирлээ!');
+    socket.on('joinRoom', (data) => {
+        socket.join(data.code);
+        io.to(data.code).emit('joinedSuccess', data.code);
     });
 
-    // Могойн хөдөлгөөний датаг дамжуулах хэсэг...
+    socket.on('disconnect', () => {
+        console.log('Хэрэглэгч саллаа');
+    });
 });
 
-http.listen(3000, () => { console.log('Сервер 3000 порт дээр аслаа'); });
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+    console.log(`Сервер ${PORT} дээр ажиллаж байна`);
+});
