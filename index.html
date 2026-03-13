@@ -1,68 +1,110 @@
 <!DOCTYPE html>
-<html lang="mn">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Snake - Dark Edition</title>
+    <title>Snake Online - Battle</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background-color: #121212; color: #e0e0e0; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #1e1e1e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 450px; }
-        h1 { color: #4CAF50; margin-bottom: 20px; font-weight: 300; }
-        input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: white; outline: none; }
-        button { width: 85%; padding: 12px; margin: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #45a049; transform: translateY(-2px); }
-        canvas { background: #000; border: 2px solid #333; margin-top: 20px; display: none; border-radius: 5px; }
-        #status { margin-top: 15px; color: #888; font-size: 0.9em; }
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
+        #lobby { margin-top: 100px; }
+        canvas { background: #000; border: 5px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.8); margin-top: 20px; }
+        .ui { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
+        input { padding: 10px; border-radius: 5px; border: none; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div class="container" id="lobby">
+
+    <div id="lobby">
         <h1>Snake Online</h1>
-        <input type="text" id="username" placeholder="Таны нэр...">
-        <button onclick="createRoom()">Шинэ өрөө үүсгэх</button>
-        <div style="margin: 15px; color: #555;">— эсвэл —</div>
-        <input type="text" id="roomCode" placeholder="Өрөөний код оруулах">
-        <button onclick="joinRoom()" style="background: #2196F3;">Өрөөнд орох</button>
-        <div id="status">Найзтайгаа тоглоход бэлэн үү?</div>
+        <input type="text" id="username" placeholder="Нэрээ бич">
+        <button onclick="createRoom()">Өрөө үүсгэх</button><br><br>
+        <input type="text" id="roomCode" placeholder="Код оруул">
+        <button onclick="joinRoom()">Орох</button>
     </div>
 
-    <div id="game-area" style="display:none; text-align: center;">
-        <h2 id="room-display" style="color: #888;"></h2>
-        <canvas id="gameCanvas" width="500" height="500"></canvas>
+    <div id="game-area" style="display:none;">
+        <div class="ui">
+            <h2 id="room-display"></h2>
+            <p>Сумаар удирдаарай!</p>
+        </div>
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
     </div>
 
     <script>
         const socket = io();
-        let canvas = document.getElementById('gameCanvas');
-        let ctx = canvas.getContext('2d');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let myId;
 
         function createRoom() {
             const name = document.getElementById('username').value;
-            if(!name) return alert("Нэрээ оруулна уу!");
             socket.emit('createRoom', { name });
         }
 
         function joinRoom() {
             const name = document.getElementById('username').value;
             const code = document.getElementById('roomCode').value;
-            if(!name || !code) return alert("Нэр болон код оруулна уу!");
             socket.emit('joinRoom', { name, code });
         }
 
-        socket.on('roomCreated', (code) => {
-            startDisplay(code);
-        });
+        socket.on('roomCreated', (code) => { initGame(code); });
+        socket.on('joinedSuccess', (code) => { initGame(code); });
 
-        socket.on('joinedSuccess', (code) => {
-            startDisplay(code);
-        });
-
-        function startDisplay(code) {
+        function initGame(code) {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
-            document.getElementById('room-display').innerText = "Өрөөний код: " + code;
-            // Тоглоомын зурах хэсэг энд үргэлжилнэ...
+            document.getElementById('room-display').innerText = "Өрөө: " + code;
+            myId = socket.id;
+            gameLoop();
+        }
+
+        // Тоглоомын үндсэн өгөгдөл
+        let snake = [{x: 10, y: 10}];
+        let food = {x: 15, y: 15};
+        let direction = {x: 0, y: 0};
+        const gridSize = 20;
+
+        window.addEventListener('keydown', e => {
+            if(e.key === 'ArrowUp' && direction.y === 0) direction = {x: 0, y: -1};
+            if(e.key === 'ArrowDown' && direction.y === 0) direction = {x: 0, y: 1};
+            if(e.key === 'ArrowLeft' && direction.x === 0) direction = {x: -1, y: 0};
+            if(e.key === 'ArrowRight' && direction.x === 0) direction = {x: 1, y: 0};
+        });
+
+        function gameLoop() {
+            update();
+            draw();
+            setTimeout(gameLoop, 100);
+        }
+
+        function update() {
+            if (direction.x === 0 && direction.y === 0) return;
+            const head = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
+            snake.unshift(head);
+            if(head.x === food.x && head.y === food.y) {
+                food = {x: Math.floor(Math.random()*30), y: Math.floor(Math.random()*30)};
+            } else {
+                snake.pop();
+            }
+            // Хил хязгаар шалгах
+            if(head.x < 0 || head.x >= 30 || head.y < 0 || head.y >= 30) {
+                snake = [{x: 10, y: 10}];
+                direction = {x: 0, y: 0};
+                alert("Тоглоом дууслаа!");
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'red';
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize-2, gridSize-2);
+
+            ctx.fillStyle = '#4CAF50';
+            snake.forEach(part => {
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize-2, gridSize-2);
+            });
         }
     </script>
 </body>
