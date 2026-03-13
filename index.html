@@ -1,110 +1,252 @@
 <!DOCTYPE html>
-<html>
+<html lang="mn">
 <head>
-    <title>Snake Online - Battle</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Snake Online Battle</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #lobby { margin-top: 100px; }
-        canvas { background: #000; border: 5px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.8); margin-top: 20px; }
-        .ui { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
-        input { padding: 10px; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px; }
+        body { background: #121212; color: #eee; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; touch-action: manipulation; }
+        #lobby { padding-top: 50px; }
+        .menu-box { background: #1e1e1e; padding: 20px; border-radius: 15px; display: inline-block; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        input { padding: 12px; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: white; margin: 5px; width: 200px; }
+        button { padding: 12px 25px; border-radius: 8px; border: none; background: #4CAF50; color: white; cursor: pointer; font-weight: bold; }
+        canvas { background: #000; border: 3px solid #333; margin-top: 10px; max-width: 95vw; max-height: 70vh; }
+        .controls { display: grid; grid-template-columns: repeat(3, 60px); grid-gap: 10px; justify-content: center; margin-top: 15px; }
+        .btn { width: 60px; height: 60px; background: #333; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; user-select: none; }
+        #game-area { display: none; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <h1>Snake Online</h1>
-        <input type="text" id="username" placeholder="Нэрээ бич">
-        <button onclick="createRoom()">Өрөө үүсгэх</button><br><br>
-        <input type="text" id="roomCode" placeholder="Код оруул">
-        <button onclick="joinRoom()">Орох</button>
+        <div class="menu-box">
+            <h2>🐍 Snake Multiplayer</h2>
+            <input type="text" id="username" placeholder="Таны нэр..."><br>
+            <button onclick="createRoom()">Өрөө үүсгэх</button>
+            <p style="color: #555;">— эсвэл —</p>
+            <input type="text" id="roomCode" placeholder="Өрөөний код..."><br>
+            <button onclick="joinRoom()" style="background: #2196F3;">Орох</button>
+        </div>
     </div>
 
-    <div id="game-area" style="display:none;">
-        <div class="ui">
-            <h2 id="room-display"></h2>
-            <p>Сумаар удирдаарай!</p>
+    <div id="game-area">
+        <h3 id="room-info" style="margin: 5px; color: #888;"></h3>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <div class="controls">
+            <div></div><div class="btn" onclick="setDir(0, -1)">▲</div><div></div>
+            <div class="btn" onclick="setDir(-1, 0)">◀</div><div class="btn" onclick="setDir(0, 1)">▼</div><div class="btn" onclick="setDir(1, 0)">▶</div>
         </div>
-        <canvas id="gameCanvas" width="600" height="600"></canvas>
     </div>
 
     <script>
         const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        let myId;
+        const gridSize = 20;
+        const tileCount = 20;
+
+        let snake = [{x: 10, y: 10}];
+        let food = {x: 5, y: 5};
+        let dx = 0, dy = 0;
+        let score = 0;
 
         function createRoom() {
             const name = document.getElementById('username').value;
+            if(!name) return alert("Нэрээ оруул!");
             socket.emit('createRoom', { name });
         }
 
         function joinRoom() {
             const name = document.getElementById('username').value;
             const code = document.getElementById('roomCode').value;
+            if(!name || !code) return alert("Нэр болон код оруул!");
             socket.emit('joinRoom', { name, code });
         }
 
-        socket.on('roomCreated', (code) => { initGame(code); });
-        socket.on('joinedSuccess', (code) => { initGame(code); });
+        socket.on('roomCreated', code => startGame(code));
+        socket.on('joinedSuccess', code => startGame(code));
 
-        function initGame(code) {
+        function startGame(code) {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
-            document.getElementById('room-display').innerText = "Өрөө: " + code;
-            myId = socket.id;
-            gameLoop();
+            document.getElementById('room-info').innerText = "Өрөө: " + code;
+            setInterval(drawGame, 100);
         }
 
-        // Тоглоомын үндсэн өгөгдөл
-        let snake = [{x: 10, y: 10}];
-        let food = {x: 15, y: 15};
-        let direction = {x: 0, y: 0};
-        const gridSize = 20;
+        function setDir(x, y) {
+            if ((x === -dx && x !== 0) || (y === -dy && y !== 0)) return;
+            dx = x; dy = y;
+        }
 
         window.addEventListener('keydown', e => {
-            if(e.key === 'ArrowUp' && direction.y === 0) direction = {x: 0, y: -1};
-            if(e.key === 'ArrowDown' && direction.y === 0) direction = {x: 0, y: 1};
-            if(e.key === 'ArrowLeft' && direction.x === 0) direction = {x: -1, y: 0};
-            if(e.key === 'ArrowRight' && direction.x === 0) direction = {x: 1, y: 0};
+            if (e.key === 'ArrowUp') setDir(0, -1);
+            if (e.key === 'ArrowDown') setDir(0, 1);
+            if (e.key === 'ArrowLeft') setDir(-1, 0);
+            if (e.key === 'ArrowRight') setDir(1, 0);
         });
 
-        function gameLoop() {
-            update();
-            draw();
-            setTimeout(gameLoop, 100);
-        }
+        function drawGame() {
+            // Могойн хөдөлгөөн
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            
+            // Хана мөргөх
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                resetGame(); return;
+            }
 
-        function update() {
-            if (direction.x === 0 && direction.y === 0) return;
-            const head = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
             snake.unshift(head);
-            if(head.x === food.x && head.y === food.y) {
-                food = {x: Math.floor(Math.random()*30), y: Math.floor(Math.random()*30)};
-            } else {
-                snake.pop();
-            }
-            // Хил хязгаар шалгах
-            if(head.x < 0 || head.x >= 30 || head.y < 0 || head.y >= 30) {
-                snake = [{x: 10, y: 10}];
-                direction = {x: 0, y: 0};
-                alert("Тоглоом дууслаа!");
-            }
-        }
 
-        function draw() {
-            ctx.fillStyle = 'black';
+            // Хоол идэх
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                food = { x: Math.floor(Math.random() * tileCount), y: Math.floor(Math.random() * tileCount) };
+            } else {
+                if(dx !== 0 || dy !== 0) snake.pop();
+            }
+
+            // Зураглал
+            ctx.fillStyle = "black";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = 'red';
+            ctx.fillStyle = "#ff3e3e";
             ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize-2, gridSize-2);
 
-            ctx.fillStyle = '#4CAF50';
-            snake.forEach(part => {
-                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize-2, gridSize-2);
-            });
+            ctx.fillStyle = "#4CAF50";
+            snake.forEach(part => ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize-2, gridSize-2));
+        }
+
+        function resetGame() {
+            alert("Тоглоом дууслаа! Оноо: " + score);
+            snake = [{x: 10, y: 10}];
+            dx = 0; dy = 0; score = 0;
+        }
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Snake Online Battle</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background: #121212; color: #eee; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; overflow: hidden; touch-action: manipulation; }
+        #lobby { padding-top: 50px; }
+        .menu-box { background: #1e1e1e; padding: 20px; border-radius: 15px; display: inline-block; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        input { padding: 12px; border-radius: 8px; border: 1px solid #333; background: #2c2c2c; color: white; margin: 5px; width: 200px; }
+        button { padding: 12px 25px; border-radius: 8px; border: none; background: #4CAF50; color: white; cursor: pointer; font-weight: bold; }
+        canvas { background: #000; border: 3px solid #333; margin-top: 10px; max-width: 95vw; max-height: 70vh; }
+        .controls { display: grid; grid-template-columns: repeat(3, 60px); grid-gap: 10px; justify-content: center; margin-top: 15px; }
+        .btn { width: 60px; height: 60px; background: #333; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; user-select: none; }
+        #game-area { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <div class="menu-box">
+            <h2>🐍 Snake Multiplayer</h2>
+            <input type="text" id="username" placeholder="Таны нэр..."><br>
+            <button onclick="createRoom()">Өрөө үүсгэх</button>
+            <p style="color: #555;">— эсвэл —</p>
+            <input type="text" id="roomCode" placeholder="Өрөөний код..."><br>
+            <button onclick="joinRoom()" style="background: #2196F3;">Орох</button>
+        </div>
+    </div>
+
+    <div id="game-area">
+        <h3 id="room-info" style="margin: 5px; color: #888;"></h3>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <div class="controls">
+            <div></div><div class="btn" onclick="setDir(0, -1)">▲</div><div></div>
+            <div class="btn" onclick="setDir(-1, 0)">◀</div><div class="btn" onclick="setDir(0, 1)">▼</div><div class="btn" onclick="setDir(1, 0)">▶</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gridSize = 20;
+        const tileCount = 20;
+
+        let snake = [{x: 10, y: 10}];
+        let food = {x: 5, y: 5};
+        let dx = 0, dy = 0;
+        let score = 0;
+
+        function createRoom() {
+            const name = document.getElementById('username').value;
+            if(!name) return alert("Нэрээ оруул!");
+            socket.emit('createRoom', { name });
+        }
+
+        function joinRoom() {
+            const name = document.getElementById('username').value;
+            const code = document.getElementById('roomCode').value;
+            if(!name || !code) return alert("Нэр болон код оруул!");
+            socket.emit('joinRoom', { name, code });
+        }
+
+        socket.on('roomCreated', code => startGame(code));
+        socket.on('joinedSuccess', code => startGame(code));
+
+        function startGame(code) {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('room-info').innerText = "Өрөө: " + code;
+            setInterval(drawGame, 100);
+        }
+
+        function setDir(x, y) {
+            if ((x === -dx && x !== 0) || (y === -dy && y !== 0)) return;
+            dx = x; dy = y;
+        }
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowUp') setDir(0, -1);
+            if (e.key === 'ArrowDown') setDir(0, 1);
+            if (e.key === 'ArrowLeft') setDir(-1, 0);
+            if (e.key === 'ArrowRight') setDir(1, 0);
+        });
+
+        function drawGame() {
+            // Могойн хөдөлгөөн
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+            
+            // Хана мөргөх
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                resetGame(); return;
+            }
+
+            snake.unshift(head);
+
+            // Хоол идэх
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                food = { x: Math.floor(Math.random() * tileCount), y: Math.floor(Math.random() * tileCount) };
+            } else {
+                if(dx !== 0 || dy !== 0) snake.pop();
+            }
+
+            // Зураглал
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#ff3e3e";
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize-2, gridSize-2);
+
+            ctx.fillStyle = "#4CAF50";
+            snake.forEach(part => ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize-2, gridSize-2));
+        }
+
+        function resetGame() {
+            alert("Тоглоом дууслаа! Оноо: " + score);
+            snake = [{x: 10, y: 10}];
+            dx = 0; dy = 0; score = 0;
         }
     </script>
 </body>
