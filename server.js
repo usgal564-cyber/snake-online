@@ -12,8 +12,9 @@ io.on('connection', (socket) => {
         const roomId = Math.random().toString(36).substring(2, 7).toUpperCase();
         rooms[roomId] = { 
             players: {}, 
-            food: {x: 10, y: 10, color: '#ff3e3e'},
-            status: 'waiting' // waiting, playing, ended
+            food: {x: 5, y: 5, color: '#ff3e3e'},
+            status: 'waiting',
+            speed: 200 // Эхлэх хурд аажуу (200ms)
         };
         socket.join(roomId);
         socket.emit('roomCreated', roomId);
@@ -32,10 +33,12 @@ io.on('connection', (socket) => {
     socket.on('playerReady', (data) => {
         const room = rooms[data.code];
         if (room) {
+            // Тоглогч бүрт өөр өөр эхлэх цэг өгөх
+            const startPos = Object.keys(room.players).length === 0 ? {x: 5, y: 10} : {x: 20, y: 10};
             room.players[socket.id] = { 
                 name: data.name, 
                 ready: true, 
-                snake: [{x: 10, y: 10}, {x: 10, y: 11}], 
+                snake: [startPos, {x: startPos.x, y: startPos.y + 1}], 
                 score: 0, 
                 color: '#4CAF50',
                 dx: 0, dy: 0
@@ -44,7 +47,9 @@ io.on('connection', (socket) => {
             const playersArr = Object.values(room.players);
             if (playersArr.length === 2 && playersArr.every(p => p.ready)) {
                 room.status = 'playing';
+                room.speed = 200; // Хурдыг шинэчлэх
                 io.to(data.code).emit('gameStart', room);
+                startGameLoop(data.code);
             } else {
                 io.to(data.code).emit('waitingForPartner', playersArr.length);
             }
@@ -53,59 +58,65 @@ io.on('connection', (socket) => {
 
     socket.on('updateInput', (data) => {
         if (rooms[data.code] && rooms[data.code].players[socket.id]) {
-            rooms[data.code].players[socket.id].dx = data.dx;
-            rooms[data.code].players[socket.id].dy = data.dy;
+            const p = rooms[data.code].players[socket.id];
+            // Өөдөөсөө эргэхийг хориглох
+            if (data.dx === -p.dx && data.dx !== 0) return;
+            if (data.dy === -p.dy && data.dy !== 0) return;
+            p.dx = data.dx;
+            p.dy = data.dy;
         }
     });
+
+    function startGameLoop(code) {
+        if (!rooms[code] || rooms[code].status !== 'playing') return;
+
+        const room = rooms[code];
+        for (let id in room.players) {
+            const p = room.players[id];
+            if (p.dx === 0 && p.dy === 0) continue;
+
+            const head = { x: p.snake[0].x + p.dx, y: p.snake[0].y + p.dy };
+
+            // Хана мөргөх эсвэл өөрийгөө мөргөх
+            if (head.x < 0 || head.x >= 25 || head.y < 0 || head.y >= 25) {
+                room.status = 'ended';
+                io.to(code).emit('gameOver', p.name + " хожигдлоо!");
+                return;
+            }
+
+            p.snake.unshift(head);
+
+            // Идэш идэх
+            if (head.x === room.food.x && head.y === room.food.y) {
+                p.score += 10;
+                p.color = room.food.color;
+                // Хурд нэмэх (хамгийн багадаа 50ms хүртэл)
+                if (room.speed > 50) room.speed -= 5; 
+                
+                const colors = ['#FFD700', '#FF00FF', '#00FFFF', '#ADFF2F', '#FF4500'];
+                room.food = { 
+                    x: Math.floor(Math.random() * 23) + 1, 
+                    y: Math.floor(Math.random() * 23) + 1, 
+                    color: colors[Math.floor(Math.random() * colors.length)] 
+                };
+            } else {
+                p.snake.pop();
+            }
+        }
+
+        io.to(code).emit('gameState', room);
+        
+        // Хурд өөрчлөгдөх боломжтойгоор дараагийн циклийг дуудах
+        setTimeout(() => startGameLoop(code), room.speed);
+    }
 
     socket.on('rematchRequest', (data) => {
         if (rooms[data.code]) {
             rooms[data.code].status = 'waiting';
-            for (let id in rooms[data.code].players) {
-                rooms[data.code].players[id].ready = false;
-                rooms[data.code].players[id].snake = [{x: 10, y: 10}, {x: 10, y: 11}];
-                rooms[data.code].players[id].score = 0;
-            }
+            rooms[data.code].players = {};
             io.to(data.code).emit('resetUI');
         }
     });
-
-    // Тоглоомын логикийг сервер дээр 100ms тутамд ажиллуулах (Бие биенээ харах гол түлхүүр)
-    setInterval(() => {
-        for (let code in rooms) {
-            const room = rooms[code];
-            if (room.status === 'playing') {
-                for (let id in room.players) {
-                    const p = room.players[id];
-                    if (p.dx === 0 && p.dy === 0) continue;
-
-                    const head = { x: p.snake[0].x + p.dx, y: p.snake[0].y + p.dy };
-                    
-                    // Хана мөргөх
-                    if (head.x < 0 || head.x >= 25 || head.y < 0 || head.y >= 25) {
-                        room.status = 'ended';
-                        io.to(code).emit('gameOver', p.name + " хожигдлоо!");
-                        break;
-                    }
-
-                    p.snake.unshift(head);
-                    if (head.x === room.food.x && head.y === room.food.y) {
-                        p.score += 10;
-                        p.color = room.food.color;
-                        const colors = ['#FFD700', '#FF00FF', '#00FFFF', '#ADFF2F'];
-                        room.food = { 
-                            x: Math.floor(Math.random()*25), 
-                            y: Math.floor(Math.random()*25), 
-                            color: colors[Math.floor(Math.random()*colors.length)] 
-                        };
-                    } else {
-                        p.snake.pop();
-                    }
-                }
-                io.to(code).emit('gameState', room);
-            }
-        }
-    }, 100);
 });
 
 const PORT = process.env.PORT || 3000;
