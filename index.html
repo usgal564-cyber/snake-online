@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <title>Multiplayer Snake Game</title>
+    <style>
+        body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; }
+        #game-container { position: relative; margin-top: 20px; }
+        canvas { border: 2px solid #444; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .menu { background: #2a2a2a; padding: 20px; border-radius: 10px; margin-top: 50px; text-align: center; }
+        input { padding: 10px; border-radius: 5px; border: none; margin: 5px; }
+        button { padding: 10px 20px; border-radius: 5px; border: none; background: #4CAF50; color: white; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .room-info { margin-top: 10px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby" class="menu">
+        <h2>Snake Multiplayer</h2>
+        <input type="text" id="username" placeholder="Нэрээ бичнэ үү..."> <br>
+        <button onclick="createRoom()">Өрөө үүсгэх</button>
+        <div style="margin: 10px;">эсвэл</div>
+        <input type="text" id="roomCode" placeholder="Өрөөний код...">
+        <button onclick="joinRoom()">Холбогдох</button>
+    </div>
+
+    <div id="game-area" style="display:none;">
+        <h3 id="player-display"></h3>
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        <div class="room-info" id="room-id-display"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        // Энд тоглоомын JS логик орно
+    </script>
+</body>
+</html>
