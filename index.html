@@ -2,33 +2,38 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snake Battle Royale</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #0f0c29; color: white; font-family: 'Arial', sans-serif; text-align: center; margin: 0; }
-        #lobby, #status-area { margin-top: 50px; background: rgba(255,255,255,0.1); padding: 30px; display: inline-block; border-radius: 15px; }
-        canvas { background: #000; border: 3px solid #00d2ff; border-radius: 10px; display: none; margin-top: 20px; }
-        .score-board { display: none; justify-content: center; gap: 30px; font-size: 20px; margin: 15px; }
-        button { padding: 12px 25px; border: none; border-radius: 8px; background: #00d2ff; color: #000; font-weight: bold; cursor: pointer; margin: 10px; }
-        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; }
-        #rematch-btn { display: none; background: #39ff14; }
+        body { background: #0a0a12; color: white; font-family: 'Orbitron', sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        #lobby, #status-area { margin-top: 80px; background: rgba(255,255,255,0.05); padding: 40px; border-radius: 20px; border: 1px solid #333; display: inline-block; }
+        canvas { background: #000; border: 4px solid #333; box-shadow: 0 0 30px rgba(0,210,255,0.2); display: none; margin-top: 20px; }
+        .score-board { display: none; justify-content: center; gap: 40px; font-size: 24px; padding: 20px; font-weight: bold; }
+        #overlay { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); padding: 40px; border-radius: 20px; border: 2px solid #ff3e3e; z-index: 10; box-shadow: 0 0 50px #ff3e3e; }
+        button { padding: 15px 30px; border: none; border-radius: 10px; background: #00d2ff; color: #000; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { transform: scale(1.1); box-shadow: 0 0 20px #00d2ff; }
+        input { padding: 12px; border-radius: 8px; border: 1px solid #444; background: #111; color: white; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <h1>🐍 Snake Multiplayer</h1>
+        <h1>🐍 SNAKE MULTIPLAYER</h1>
         <input type="text" id="username" placeholder="Нэрээ бич"><br>
-        <button onclick="createRoom()">Өрөө үүсгэх</button><br>
-        <input type="text" id="roomCode" placeholder="Код оруул"><br>
-        <button onclick="joinRoom()" style="background: #9d50bb;">Өрөөнд орох</button>
+        <button onclick="createRoom()">ӨРӨӨ ҮҮСГЭХ</button><br>
+        <input type="text" id="roomCode" placeholder="КОД ОРУУЛ"><br>
+        <button onclick="joinRoom()" style="background: #9d50bb;">ӨРӨӨНД ОРОХ</button>
     </div>
 
     <div id="status-area" style="display:none;">
         <h2 id="info-msg">Найзыгаа хүлээж байна...</h2>
-        <button id="ready-btn" onclick="sendReady()">Би бэлэн!</button>
-        <button id="rematch-btn" onclick="requestRematch()">Дахин тоглох уу?</button>
+        <button id="ready-btn" onclick="sendReady()">БИ БЭЛЭН!</button>
+    </div>
+
+    <div id="overlay">
+        <h1 id="winner-msg" style="color: #ff3e3e;">ТОГЛООМ ДУУСЛАА!</h1>
+        <p id="final-score"></p>
+        <button onclick="requestRematch()" style="background: #39ff14;">ДАХИН ТОГЛОХ</button>
     </div>
 
     <div class="score-board" id="scoreBoard"></div>
@@ -57,39 +62,47 @@
         function showStatus() {
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('status-area').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Өрөө: " + myRoom + ". Бэлэн товчийг дар!";
+            document.getElementById('info-msg').innerText = "Өрөөний код: " + myRoom;
         }
 
         function sendReady() {
             socket.emit('playerReady', { code: myRoom, name: myName });
             document.getElementById('ready-btn').style.display = 'none';
-            document.getElementById('info-msg').innerText = "Та бэлэн боллоо. Найзыгаа хүлээж байна...";
+            document.getElementById('info-msg').innerText = "Та бэлэн боллоо. Хүлээж байна...";
         }
 
         socket.on('gameStart', () => {
             document.getElementById('status-area').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
             document.getElementById('gameCanvas').style.display = 'inline-block';
             document.getElementById('scoreBoard').style.display = 'flex';
         });
 
         window.onkeydown = e => {
-            let dx = 0, dy = 0;
-            if(e.key === 'ArrowUp') dy = -1;
-            if(e.key === 'ArrowDown') dy = 1;
-            if(e.key === 'ArrowLeft') dx = -1;
-            if(e.key === 'ArrowRight') dx = 1;
-            if(dx !== 0 || dy !== 0) socket.emit('updateInput', { code: myRoom, dx, dy });
+            if(e.key === 'ArrowUp') socket.emit('updateInput', { code: myRoom, dx: 0, dy: -1 });
+            if(e.key === 'ArrowDown') socket.emit('updateInput', { code: myRoom, dx: 0, dy: 1 });
+            if(e.key === 'ArrowLeft') socket.emit('updateInput', { code: myRoom, dx: -1, dy: 0 });
+            if(e.key === 'ArrowRight') socket.emit('updateInput', { code: myRoom, dx: 1, dy: 0 });
         };
 
         socket.on('gameState', data => {
-            ctx.fillStyle = 'black';
+            ctx.fillStyle = '#0a0a12';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Grid lines (загварт зориулж)
+            ctx.strokeStyle = '#1a1a2e';
+            for(let i=0; i<25; i++) {
+                ctx.strokeRect(i*20, 0, 1, 500);
+                ctx.strokeRect(0, i*20, 500, 1);
+            }
 
             // Food
             ctx.fillStyle = data.food.color;
+            ctx.shadowBlur = 15; ctx.shadowColor = data.food.color;
             ctx.beginPath();
             ctx.arc(data.food.x * 20 + 10, data.food.y * 20 + 10, 8, 0, Math.PI*2);
             ctx.fill();
+            ctx.shadowBlur = 0;
 
             // Players
             let scoresHtml = "";
@@ -97,20 +110,16 @@
                 const p = data.players[id];
                 ctx.fillStyle = p.color;
                 p.snake.forEach((part, i) => {
-                    ctx.globalAlpha = i === 0 ? 1 : 0.6;
-                    ctx.fillRect(part.x * 20, part.y * 20, 19, 19);
+                    ctx.fillRect(part.x * 20 + 1, part.y * 20 + 1, 18, 18);
                 });
-                ctx.globalAlpha = 1;
-                scoresHtml += `<div style="color:${p.color}">${p.name}: ${p.score}</div>`;
+                scoresHtml += `<div style="color:${p.color}">${p.name.toUpperCase()}: ${p.score}</div>`;
             }
             document.getElementById('scoreBoard').innerHTML = scoresHtml;
         });
 
         socket.on('gameOver', msg => {
-            alert(msg);
-            document.getElementById('status-area').style.display = 'inline-block';
-            document.getElementById('rematch-btn').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Тоглоом дууслаа!";
+            document.getElementById('overlay').style.display = 'block';
+            document.getElementById('winner-msg').innerText = msg;
         });
 
         function requestRematch() {
@@ -118,10 +127,11 @@
         }
 
         socket.on('resetUI', () => {
-            document.getElementById('rematch-btn').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('status-area').style.display = 'inline-block';
             document.getElementById('ready-btn').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Дахин тоглоход бэлэн үү?";
             document.getElementById('gameCanvas').style.display = 'none';
+            document.getElementById('info-msg').innerText = "Дахин тоглоход бэлэн үү?";
         });
     </script>
 </body>
