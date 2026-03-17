@@ -1,127 +1,118 @@
 <!DOCTYPE html>
-<html>
+<html lang="mn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Battle Royale</title>
+    <title>Typing Battle Royale</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #0f0c29; color: white; font-family: 'Arial', sans-serif; text-align: center; margin: 0; }
-        #lobby, #status-area { margin-top: 50px; background: rgba(255,255,255,0.1); padding: 30px; display: inline-block; border-radius: 15px; }
-        canvas { background: #000; border: 3px solid #00d2ff; border-radius: 10px; display: none; margin-top: 20px; }
-        .score-board { display: none; justify-content: center; gap: 30px; font-size: 20px; margin: 15px; }
-        button { padding: 12px 25px; border: none; border-radius: 8px; background: #00d2ff; color: #000; font-weight: bold; cursor: pointer; margin: 10px; }
-        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; }
-        #rematch-btn { display: none; background: #39ff14; }
+        body { background: #323437; color: #d1d0c5; font-family: 'Roboto Mono', monospace; text-align: center; padding: 50px; }
+        #lobby, #game-area { max-width: 800px; margin: auto; }
+        .text-display { font-size: 24px; line-height: 1.5; margin-bottom: 20px; text-align: left; position: relative; }
+        .input-field { width: 100%; background: transparent; border: none; font-size: 24px; color: #e2b714; outline: none; border-bottom: 2px solid #646669; }
+        .player-bar { height: 10px; background: #646669; margin: 10px 0; border-radius: 5px; position: relative; }
+        .progress { height: 100%; background: #e2b714; transition: 0.2s; border-radius: 5px; }
+        .player-info { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+        .correct { color: #d1d0c5; }
+        .incorrect { color: #ca4754; text-decoration: underline; }
+        button { background: #e2b714; color: #323437; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 10px; }
+        input[type="text"] { background: #2c2e31; border: 1px solid #646669; padding: 10px; color: white; border-radius: 5px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div id="lobby">
-        <h1>🐍 Snake Multiplayer</h1>
+        <h1>⌨️ Typing Battle</h1>
         <input type="text" id="username" placeholder="Нэрээ бич"><br>
-        <button onclick="createRoom()">Өрөө үүсгэх</button><br>
-        <input type="text" id="roomCode" placeholder="Код оруул"><br>
-        <button onclick="joinRoom()" style="background: #9d50bb;">Өрөөнд орох</button>
+        <button onclick="createRoom()">ӨРӨӨ ҮҮСГЭХ</button><br>
+        <input type="text" id="roomCode" placeholder="КОД ОРУУЛ"><br>
+        <button onclick="joinRoom()">ОРОХ</button>
     </div>
 
-    <div id="status-area" style="display:none;">
-        <h2 id="info-msg">Найзыгаа хүлээж байна...</h2>
-        <button id="ready-btn" onclick="sendReady()">Би бэлэн!</button>
-        <button id="rematch-btn" onclick="requestRematch()">Дахин тоглох уу?</button>
+    <div id="game-area" style="display:none;">
+        <h2 id="room-id" style="color: #646669;"></h2>
+        <div id="leaderboard"></div>
+        <hr style="border-color: #646669; margin: 30px 0;">
+        <div id="text-to-type" class="text-display"></div>
+        <input type="text" id="typing-input" class="input-field" autofocus disabled placeholder="Хүлээж байна...">
     </div>
-
-    <div class="score-board" id="scoreBoard"></div>
-    <canvas id="gameCanvas" width="500" height="500"></canvas>
 
     <script>
         const socket = io();
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let myRoom, myName;
+        let myRoom, myName, targetText = "";
+        let startTime;
 
         function createRoom() {
-            myName = document.getElementById('username').value || "Player";
+            myName = document.getElementById('username').value || "User";
             socket.emit('createRoom', { name: myName });
         }
 
         function joinRoom() {
-            myName = document.getElementById('username').value || "Player";
+            myName = document.getElementById('username').value || "User";
             myRoom = document.getElementById('roomCode').value.toUpperCase();
             socket.emit('joinRoom', { name: myName, code: myRoom });
         }
 
-        socket.on('roomCreated', code => { myRoom = code; showStatus(); });
-        socket.on('joinedSuccess', code => { myRoom = code; showStatus(); });
+        socket.on('roomCreated', code => { myRoom = code; setupGame(); });
+        socket.on('joinedSuccess', data => { myRoom = data.code; targetText = data.text; setupGame(); });
 
-        function showStatus() {
+        function setupGame() {
             document.getElementById('lobby').style.display = 'none';
-            document.getElementById('status-area').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Өрөө: " + myRoom + ". Бэлэн товчийг дар!";
-        }
-
-        function sendReady() {
+            document.getElementById('game-area').style.display = 'block';
+            document.getElementById('room-id').innerText = "ӨРӨӨ: " + myRoom;
+            document.getElementById('text-to-type').innerText = targetText || "Бэлэн товчийг дарна уу...";
             socket.emit('playerReady', { code: myRoom, name: myName });
-            document.getElementById('ready-btn').style.display = 'none';
-            document.getElementById('info-msg').innerText = "Та бэлэн боллоо. Найзыгаа хүлээж байна...";
         }
 
         socket.on('gameStart', () => {
-            document.getElementById('status-area').style.display = 'none';
-            document.getElementById('gameCanvas').style.display = 'inline-block';
-            document.getElementById('scoreBoard').style.display = 'flex';
+            const input = document.getElementById('typing-input');
+            input.disabled = false;
+            input.placeholder = "Бичиж эхэл...";
+            input.focus();
+            startTime = new Date();
         });
 
-        window.onkeydown = e => {
-            let dx = 0, dy = 0;
-            if(e.key === 'ArrowUp') dy = -1;
-            if(e.key === 'ArrowDown') dy = 1;
-            if(e.key === 'ArrowLeft') dx = -1;
-            if(e.key === 'ArrowRight') dx = 1;
-            if(dx !== 0 || dy !== 0) socket.emit('updateInput', { code: myRoom, dx, dy });
-        };
+        document.getElementById('typing-input').addEventListener('input', e => {
+            const val = e.target.value;
+            const progress = (val.length / targetText.length) * 100;
+            
+            // WPM тооцох
+            const timeElapsed = (new Date() - startTime) / 60000;
+            const wpm = Math.round((val.length / 5) / timeElapsed) || 0;
 
-        socket.on('gameState', data => {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Food
-            ctx.fillStyle = data.food.color;
-            ctx.beginPath();
-            ctx.arc(data.food.x * 20 + 10, data.food.y * 20 + 10, 8, 0, Math.PI*2);
-            ctx.fill();
-
-            // Players
-            let scoresHtml = "";
-            for(let id in data.players) {
-                const p = data.players[id];
-                ctx.fillStyle = p.color;
-                p.snake.forEach((part, i) => {
-                    ctx.globalAlpha = i === 0 ? 1 : 0.6;
-                    ctx.fillRect(part.x * 20, part.y * 20, 19, 19);
-                });
-                ctx.globalAlpha = 1;
-                scoresHtml += `<div style="color:${p.color}">${p.name}: ${p.score}</div>`;
+            // Алдаа шалгах дизайн
+            let html = "";
+            for(let i=0; i<targetText.length; i++) {
+                if(i < val.length) {
+                    html += `<span class="${val[i] === targetText[i] ? 'correct' : 'incorrect'}">${targetText[i]}</span>`;
+                } else {
+                    html += `<span>${targetText[i]}</span>`;
+                }
             }
-            document.getElementById('scoreBoard').innerHTML = scoresHtml;
+            document.getElementById('text-to-type').innerHTML = html;
+
+            if (val === targetText) {
+                socket.emit('updateProgress', { code: myRoom, progress: 100, wpm });
+                document.getElementById('typing-input').disabled = true;
+            } else {
+                socket.emit('updateProgress', { code: myRoom, progress, wpm });
+            }
         });
 
-        socket.on('gameOver', msg => {
-            alert(msg);
-            document.getElementById('status-area').style.display = 'inline-block';
-            document.getElementById('rematch-btn').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Тоглоом дууслаа!";
+        socket.on('gameState', players => {
+            let html = "";
+            for(let id in players) {
+                const p = players[id];
+                html += `
+                    <div class="player-info"><span>${p.name}</span><span>${p.wpm} WPM</span></div>
+                    <div class="player-bar"><div class="progress" style="width: ${p.progress}%"></div></div>
+                `;
+            }
+            document.getElementById('leaderboard').innerHTML = html;
         });
 
-        function requestRematch() {
-            socket.emit('rematchRequest', { code: myRoom });
-        }
-
-        socket.on('resetUI', () => {
-            document.getElementById('rematch-btn').style.display = 'none';
-            document.getElementById('ready-btn').style.display = 'inline-block';
-            document.getElementById('info-msg').innerText = "Дахин тоглоход бэлэн үү?";
-            document.getElementById('gameCanvas').style.display = 'none';
+        socket.on('gameOver', winner => {
+            alert("Ялагч: " + winner);
+            location.reload();
         });
     </script>
 </body>
