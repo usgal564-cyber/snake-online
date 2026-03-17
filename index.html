@@ -1,119 +1,142 @@
 <!DOCTYPE html>
-<html lang="mn">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Typing Battle Royale</title>
+    <title>Typing Race - 50 Words</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #323437; color: #d1d0c5; font-family: 'Roboto Mono', monospace; text-align: center; padding: 50px; }
-        #lobby, #game-area { max-width: 800px; margin: auto; }
-        .text-display { font-size: 24px; line-height: 1.5; margin-bottom: 20px; text-align: left; position: relative; }
-        .input-field { width: 100%; background: transparent; border: none; font-size: 24px; color: #e2b714; outline: none; border-bottom: 2px solid #646669; }
-        .player-bar { height: 10px; background: #646669; margin: 10px 0; border-radius: 5px; position: relative; }
-        .progress { height: 100%; background: #e2b714; transition: 0.2s; border-radius: 5px; }
-        .player-info { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+        body { background: #323437; color: #646669; font-family: 'Courier New', monospace; padding: 40px; }
+        .container { max-width: 900px; margin: auto; }
+        #text-display { font-size: 24px; line-height: 1.6; text-align: left; margin: 20px 0; user-select: none; }
+        .current-word { color: #d1d0c5; border-bottom: 2px solid #e2b714; }
         .correct { color: #d1d0c5; }
-        .incorrect { color: #ca4754; text-decoration: underline; }
-        button { background: #e2b714; color: #323437; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 10px; }
-        input[type="text"] { background: #2c2e31; border: 1px solid #646669; padding: 10px; color: white; border-radius: 5px; margin-bottom: 10px; }
+        .incorrect { color: #ca4754; background: rgba(202, 71, 84, 0.2); }
+        .input-area { width: 100%; font-size: 24px; background: transparent; border: none; color: #e2b714; outline: none; margin-top: 20px; }
+        .progress-container { margin-top: 30px; border-top: 1px solid #646669; padding-top: 20px; }
+        .p-bar { height: 8px; background: #2c2e31; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+        .p-fill { height: 100%; background: #e2b714; transition: 0.3s; width: 0%; }
+        button { background: #e2b714; color: #323437; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px; }
+        #host-controls { display: none; margin-top: 20px; }
+        #winner-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 100; flex-direction: column; }
     </style>
 </head>
 <body>
 
+<div class="container">
     <div id="lobby">
-        <h1>⌨️ Typing Battle</h1>
-        <input type="text" id="username" placeholder="Нэрээ бич"><br>
-        <button onclick="createRoom()">ӨРӨӨ ҮҮСГЭХ</button><br>
-        <input type="text" id="roomCode" placeholder="КОД ОРУУЛ"><br>
-        <button onclick="joinRoom()">ОРОХ</button>
+        <h1 style="color: #d1d0c5;">⌨️ TYPING RACE</h1>
+        <input type="text" id="username" placeholder="Нэрээ бич" style="padding: 10px; border-radius: 5px; border: none; width: 200px;"><br><br>
+        <button onclick="createRoom()">ШИНЭ ӨРӨӨ</button>
+        <button onclick="joinRoom()" style="background: #646669; color: white;">ОРӨӨНД ОРОХ</button>
+        <input type="text" id="roomInput" placeholder="Код" style="padding: 10px; border-radius: 5px; border: none; width: 80px;">
     </div>
 
     <div id="game-area" style="display:none;">
-        <h2 id="room-id" style="color: #646669;"></h2>
-        <div id="leaderboard"></div>
-        <hr style="border-color: #646669; margin: 30px 0;">
-        <div id="text-to-type" class="text-display"></div>
-        <input type="text" id="typing-input" class="input-field" autofocus disabled placeholder="Хүлээж байна...">
+        <h3 id="room-code-display"></h3>
+        <div id="host-controls">
+            <p style="color: #e2b714;">Та бол өрөөний эзэн. Бүгд бэлэн болмогц эхлүүлнэ үү.</p>
+            <button onclick="startRace()" style="font-size: 20px; padding: 15px 40px;">GAME START</button>
+        </div>
+        <div id="progress-list" class="progress-container"></div>
+        <div id="text-display"></div>
+        <input type="text" id="type-input" class="input-area" placeholder="Эхлэхийг хүлээнэ үү..." disabled>
     </div>
+</div>
 
-    <script>
-        const socket = io();
-        let myRoom, myName, targetText = "";
-        let startTime;
+<div id="winner-overlay">
+    <h1 id="win-txt" style="color: #e2b714; font-size: 50px;"></h1>
+    <button onclick="location.reload()">ДАХИН ТОГЛОХ</button>
+</div>
 
-        function createRoom() {
-            myName = document.getElementById('username').value || "User";
-            socket.emit('createRoom', { name: myName });
-        }
+<script>
+    const socket = io();
+    let myRoom, myName, fullText = "", isHost = false;
+    let startTime;
 
-        function joinRoom() {
-            myName = document.getElementById('username').value || "User";
-            myRoom = document.getElementById('roomCode').value.toUpperCase();
-            socket.emit('joinRoom', { name: myName, code: myRoom });
-        }
+    function createRoom() {
+        myName = document.getElementById('username').value || "Guest";
+        socket.emit('createRoom', { name: myName });
+    }
 
-        socket.on('roomCreated', code => { myRoom = code; setupGame(); });
-        socket.on('joinedSuccess', data => { myRoom = data.code; targetText = data.text; setupGame(); });
+    function joinRoom() {
+        myName = document.getElementById('username').value || "Guest";
+        myRoom = document.getElementById('roomInput').value.toUpperCase();
+        socket.emit('joinRoom', { code: myRoom, name: myName });
+    }
 
-        function setupGame() {
-            document.getElementById('lobby').style.display = 'none';
-            document.getElementById('game-area').style.display = 'block';
-            document.getElementById('room-id').innerText = "ӨРӨӨ: " + myRoom;
-            document.getElementById('text-to-type').innerText = targetText || "Бэлэн товчийг дарна уу...";
-            socket.emit('playerReady', { code: myRoom, name: myName });
-        }
+    socket.on('roomCreated', data => {
+        myRoom = data.code; isHost = true;
+        document.getElementById('host-controls').style.display = 'block';
+        initUI();
+    });
 
-        socket.on('gameStart', () => {
-            const input = document.getElementById('typing-input');
-            input.disabled = false;
-            input.placeholder = "Бичиж эхэл...";
-            input.focus();
-            startTime = new Date();
-        });
+    socket.on('joinedSuccess', data => {
+        myRoom = data.code; fullText = data.text;
+        initUI();
+    });
 
-        document.getElementById('typing-input').addEventListener('input', e => {
-            const val = e.target.value;
-            const progress = (val.length / targetText.length) * 100;
-            
-            // WPM тооцох
-            const timeElapsed = (new Date() - startTime) / 60000;
-            const wpm = Math.round((val.length / 5) / timeElapsed) || 0;
+    function initUI() {
+        document.getElementById('lobby').style.display = 'none';
+        document.getElementById('game-area').style.display = 'block';
+        document.getElementById('room-code-display').innerText = "ROOM: " + myRoom;
+        if(fullText) document.getElementById('text-display').innerText = fullText;
+    }
 
-            // Алдаа шалгах дизайн
-            let html = "";
-            for(let i=0; i<targetText.length; i++) {
-                if(i < val.length) {
-                    html += `<span class="${val[i] === targetText[i] ? 'correct' : 'incorrect'}">${targetText[i]}</span>`;
+    function startRace() {
+        socket.emit('startGame', { code: myRoom });
+    }
+
+    socket.on('gameStart', () => {
+        const input = document.getElementById('type-input');
+        input.disabled = false; input.focus(); input.placeholder = "БИЧИЖ ЭХЭЛ!";
+        startTime = new Date();
+    });
+
+    document.getElementById('type-input').addEventListener('input', e => {
+        const val = e.target.value;
+        let html = "";
+        let correctCount = 0;
+
+        for(let i=0; i<fullText.length; i++) {
+            if(i < val.length) {
+                if(val[i] === fullText[i]) {
+                    html += `<span class="correct">${fullText[i]}</span>`;
+                    correctCount++;
                 } else {
-                    html += `<span>${targetText[i]}</span>`;
+                    html += `<span class="incorrect">${fullText[i]}</span>`;
                 }
-            }
-            document.getElementById('text-to-type').innerHTML = html;
-
-            if (val === targetText) {
-                socket.emit('updateProgress', { code: myRoom, progress: 100, wpm });
-                document.getElementById('typing-input').disabled = true;
             } else {
-                socket.emit('updateProgress', { code: myRoom, progress, wpm });
+                html += `<span>${fullText[i]}</span>`;
             }
-        });
+        }
+        document.getElementById('text-display').innerHTML = html;
 
-        socket.on('gameState', players => {
-            let html = "";
-            for(let id in players) {
-                const p = players[id];
-                html += `
-                    <div class="player-info"><span>${p.name}</span><span>${p.wpm} WPM</span></div>
-                    <div class="player-bar"><div class="progress" style="width: ${p.progress}%"></div></div>
-                `;
-            }
-            document.getElementById('leaderboard').innerHTML = html;
-        });
+        const progress = (val.length / fullText.length) * 100;
+        const wpm = Math.round((correctCount / 5) / ((new Date() - startTime) / 60000)) || 0;
+        socket.emit('updateProgress', { code: myRoom, name: myName, progress, wpm });
+    });
 
-        socket.on('gameOver', winner => {
-            alert("Ялагч: " + winner);
-            location.reload();
-        });
-    </script>
+    socket.on('gameState', players => {
+        let html = "";
+        for(let id in players) {
+            const p = players[id];
+            html += `
+                <div style="display:flex; justify-content:space-between; font-size:14px;">
+                    <span>${p.name}</span><span>${p.wpm} WPM</span>
+                </div>
+                <div class="p-bar"><div class="p-fill" style="width:${p.progress}%"></div></div>
+            `;
+        }
+        document.getElementById('progress-list').innerHTML = html;
+    });
+
+    socket.on('gameOver', winnerName => {
+        document.getElementById('winner-overlay').style.display = 'flex';
+        document.getElementById('win-txt').innerText = winnerName + " WINS!";
+    });
+
+    socket.on('errorMsg', msg => alert(msg));
+</script>
+
 </body>
 </html>
